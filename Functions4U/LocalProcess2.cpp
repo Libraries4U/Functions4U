@@ -147,6 +147,16 @@ bool LocalProcess2::DoStart(const char *_command, const Vector<String> *arg, boo
 			}
 	    }
 	}
+#ifdef WCHAR32
+	auto wscmd = ToSystemCharsetW(command);
+	auto wsdir = ToSystemCharsetW(dir);
+	const WCHAR *wdir;
+	if (dir == 0)
+		wdir = 0;
+	else 
+		wdir = wsdir;
+	bool h = CreateProcessW(NULL, wscmd, &sa, &sa, TRUE, NORMAL_PRIORITY_CLASS, (void *)envptr, wdir, &si, &pi);
+#else
 	WString wscmd(ToSystemCharsetW(command));
 	WString wsdir(ToSystemCharsetW(dir));
 	const wchar *wdir;
@@ -155,6 +165,7 @@ bool LocalProcess2::DoStart(const char *_command, const Vector<String> *arg, boo
 	else 
 		wdir = wsdir;
 	bool h = CreateProcessW(NULL, WStringBuffer(wscmd), &sa, &sa, TRUE, NORMAL_PRIORITY_CLASS, (void *)envptr, wdir, &si, &pi);
+#endif
 	LLOG("CreateProcess " << (h ? "succeeded" : "failed"));
 	CloseHandle(hErrorWrite);
 	CloseHandle(hInputRead);

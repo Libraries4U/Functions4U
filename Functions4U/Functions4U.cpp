@@ -71,12 +71,18 @@ bool LaunchFileCreateProcess(const char *file, const char *, const char *directo
     startInfo.cb = sizeof(startInfo);
     ZeroMemory(&procInfo, sizeof(procInfo));
 
+#ifdef WCHAR32
+	auto wsbexec = ToSystemCharsetW(Format("\"%s\" \"%s\"", GetExtExecutable(GetFileExt(file)), file));
+	if (!CreateProcessW(NULL, wsbexec, NULL, NULL, FALSE, 0, NULL, ToSystemCharsetW(directory), &startInfo, &procInfo))  
+		return false;
+#else
 	WString wexec;
 	wexec = Format("\"%s\" \"%s\"", GetExtExecutable(GetFileExt(file)), file).ToWString();
 	WStringBuffer wsbexec(wexec);
-	
+
 	if (!CreateProcessW(NULL, wsbexec, NULL, NULL, FALSE, 0, NULL, ToSystemCharsetW(directory), &startInfo, &procInfo))  
 		return false;
+#endif
 
    	WaitForSingleObject(procInfo.hProcess, 0);
 
@@ -498,15 +504,22 @@ bool DirectoryMove(const char *dir, const char *newPlace) {
 	if (strcmp(dir, newPlace) == 0)
 		return true;
 	
+#ifdef WCHAR32
+	auto wDir = ToSystemCharsetW(dir);
+	auto wNewPlace = ToSystemCharsetW(newPlace);
+	wDir.Add(0);
+	wNewPlace.Add(0);
+#else
 	WString wDir(dir), wNewPlace(newPlace);
     wDir.Cat() << L'\0';	
     wNewPlace.Cat() << L'\0';	
-	
+#endif
+
     SHFILEOPSTRUCTW fileOp = {};
   	fileOp.hwnd = NULL;
     fileOp.wFunc = FO_MOVE;
-    fileOp.pFrom = ~wDir;
-    fileOp.pTo = ~wNewPlace;
+    fileOp.pFrom = wDir;
+    fileOp.pTo = wNewPlace;
     fileOp.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
  
     int ret = SHFileOperationW(&fileOp);
@@ -517,13 +530,18 @@ bool FileToTrashBin(const char *path) {
     if (!FileExists(path) && !DirectoryExists(path))
         return false;
 	
+#ifdef WCHAR32
+    auto wpath = ToSystemCharsetW(path);
+    wpath.Add(0);
+#else
     WString wpath(path);
-    wpath.Cat() << L'\0';	
+    wpath.Cat() << L'\0';
+#endif
 		
     SHFILEOPSTRUCTW fileOp = {}; 
     fileOp.hwnd = NULL;
     fileOp.wFunc = FO_DELETE;
-    fileOp.pFrom = ~wpath;
+    fileOp.pFrom = wpath;
     fileOp.pTo = NULL;
     fileOp.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
 
@@ -557,7 +575,7 @@ String LoadFile_Safe(const String fileName)
 #ifdef PLATFORM_POSIX
 	int fid = open(fileName, O_RDONLY);
 #else
-	int fid = _wopen(fileName.ToWString(), O_RDONLY|O_BINARY);
+	int fid = _wopen(ToSystemCharsetW(fileName), O_RDONLY|O_BINARY);
 #endif
 	if (fid < 0) 
 		return String();
@@ -578,7 +596,7 @@ String LoadFile(const char *fileName, off_t from, size_t len)
 #ifdef PLATFORM_POSIX
 	int fid = open(fileName, O_RDONLY);
 #else
-	int fid = _wopen(String(fileName).ToWString(), O_RDONLY|O_BINARY);
+	int fid = _wopen(ToSystemCharsetW(fileName), O_RDONLY|O_BINARY);
 #endif
 	if (fid < 0) 
 		return String();
@@ -614,9 +632,8 @@ String GetExtExecutable(const String _ext)
 	if (!FileExists(file)) 
 		return "";
 	HINSTANCE ret;
-	WString fileW(file);
 	WCHAR exe[1024];
-	ret = FindExecutableW(fileW, NULL, exe);
+	ret = FindExecutableW(ToSystemCharsetW(file), NULL, exe);
 	if (reinterpret_cast<uint64>(ret) > 32)
 		exeFile = WString(exe).ToString();
 	DeleteFile(file);
@@ -689,10 +706,10 @@ Vector<String> GetDriveList() {
 #if defined(PLATFORM_WIN32) || defined (PLATFORM_WIN64)
 String GetShellFolder2(int clsid) 
 {
-	wchar path[MAX_PATH];
+	WCHAR path[MAX_PATH];
 	if(SHGetFolderPathW(NULL, clsid, NULL, //SHGFP_TYPE_CURRENT
 											0, path) == S_OK)
-		return FromUnicodeBuffer(path);
+		return FromSystemCharsetW(path);
 	return Null;
 }
 
@@ -732,9 +749,9 @@ String GetSystemFolder()
 
 #ifdef PLATFORM_WIN32
 String GetCommonAppDataFolder() { 
-	wchar path[MAX_PATH];
+	WCHAR path[MAX_PATH];
 	if(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, path) == S_OK)
-		return FromUnicodeBuffer(path);
+		return FromSystemCharsetW(path);
 	return Null;
 }
 #endif
@@ -745,7 +762,7 @@ bool SetEnv(const char *id, const char *val)
 #ifdef PLATFORM_POSIX
 	return setenv(id, val, 1) == 0;
 #else
-	return _wputenv(WString(id) + "=" + WString(val)) == 0;
+	return _wputenv(ToSystemCharsetW(String(id) + "=" + String(val))) == 0;
 #endif
 }
 
@@ -1770,7 +1787,7 @@ int64 FindStringInFile(const char *file, const String text, int64 pos0) {
 #ifdef PLATFORM_POSIX
 	FILE *fp = fopen(file, "rb");
 #else
-	FILE *fp = _wfopen(String(file).ToWString(), L"rb");
+	FILE *fp = _wfopen(ToSystemCharsetW(file), L"rb");
 #endif
 	if (fp != NULL) {
 		int64 pos = 0;
@@ -2026,7 +2043,7 @@ int64 FileDataArray::GetFileId(String fileName)
 #ifdef PLATFORM_POSIX
 	FILE *fp = fopen(fileName, "rb");
 #else
-	FILE *fp = _wfopen(fileName.ToWString(), L"rb");
+	FILE *fp = _wfopen(ToSystemCharsetW(fileName), L"rb");
 #endif
 	if (fp != NULL) {
 		int c;
